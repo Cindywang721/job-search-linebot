@@ -11,8 +11,9 @@ import os
 app = Flask(__name__)
 
 # LINE Bot 設定 - 稍後需要填入你的實際 Token
-LINE_CHANNEL_ACCESS_TOKEN = 'mF9ijq+vnuetRvm5MOvRkF5f04QwW3Hz3pRX+sXkJafIjmtPEx5Je1rCnJuiJX+215TW+49cyKsjwRDZ3f3L8zPUcfI4fFhUhtYtdEF5bUkQRf9c1HJ01GX7knXKTYNEMwo1M46xHE1ENgiVm/qfhwdB04t89/1O/w1cDnyilFU='
-LINE_CHANNEL_SECRET = 'c8a5673841dd7637bb729beef6bb9768'
+# 改成從環境變數讀取，本地開發時使用預設值
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', 'YOUR_LOCAL_TOKEN')
+LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', 'YOUR_LOCAL_SECRET')
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
@@ -138,5 +139,6 @@ def test():
 
 
 if __name__ == "__main__":
-    # 開發環境設定
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    # 部署時使用環境變數的 PORT，本地開發使用 5001
+    port = int(os.environ.get('PORT', 5001))
+    app.run(debug=False, host='0.0.0.0', port=port)
