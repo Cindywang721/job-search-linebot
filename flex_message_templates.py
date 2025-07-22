@@ -2,7 +2,8 @@ from linebot.models import (
     FlexSendMessage, BubbleContainer, CarouselContainer,
     BoxComponent, TextComponent, ImageComponent, ButtonComponent,
     URIAction, PostbackAction, MessageAction,
-    SeparatorComponent, SpacerComponent
+    SeparatorComponent
+    # 移除 SpacerComponent - 在舊版本中不存在
 )
 
 
@@ -226,7 +227,8 @@ class JobCardBuilder:
                         color="#1DB446"
                     ),
 
-                    SpacerComponent(size="sm"),
+                    # 用空的 TextComponent 代替 SpacerComponent
+                    TextComponent(text=" ", size="xs", color="#FFFFFF"),
 
                     # 次要按鈕區域
                     BoxComponent(
@@ -366,12 +368,7 @@ class JobCardBuilder:
                 ],
                 spacing="sm",
                 padding_all="20px"
-            ),
-            styles={
-                "body": {
-                    "background_color": "#F8F9FA"
-                }
-            }
+            )
         )
 
         return FlexSendMessage(
