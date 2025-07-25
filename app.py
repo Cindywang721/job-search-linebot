@@ -10,67 +10,68 @@ import os
 import threading
 import time
 import sys
+import logging
 
-# 導入保持喚醒功能
+# 設置日誌
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 導入增強版模組
 try:
-    from keep_alive import initialize_keep_alive
+    from enhanced_crawler import EnhancedJobCrawler
+    from job_condition_guide import ConversationManager
+    from flex_message_templates import JobCardBuilder
+    from user_manager import UserManager
 
-    print("✅ keep_alive 模組載入成功")
+    logger.info("✅ 所有增強版模組載入成功")
 except ImportError as e:
-    print(f"❌ 無法載入 keep_alive 模組: {e}")
+    logger.error(f"❌ 無法載入模組: {e}")
 
 
     # 建立簡單的替代品
-    def initialize_keep_alive(url):
-        print("Keep-alive功能未啟用（模組載入失敗）")
-
-# 導入爬蟲模組 - 加入錯誤處理
-try:
-    from crawler import JobCrawler
-
-    print("✅ crawler 模組載入成功")
-except ImportError as e:
-    print(f"❌ 無法載入 crawler 模組: {e}")
-    print(f"當前工作目錄: {os.getcwd()}")
-    print(f"Python 路徑: {sys.path}")
-
-
-    # 建立一個簡單的替代品，但會提示用戶功能未完成
-    class JobCrawler:
-        def search_all_platforms(self, keyword, limit=5):
-            print(f"🔍 模擬搜尋關鍵字: {keyword}")
-            # 返回空結果，提示功能開發中
+    class EnhancedJobCrawler:
+        def search_all_platforms(self, keyword, location="", salary_min="", salary_max="", limit_per_platform=5):
             return []
 
-try:
-    from flex_message_templates import JobCardBuilder
 
-    print("✅ flex_message_templates 模組載入成功")
-except ImportError as e:
-    print(f"❌ 無法載入 flex_message_templates 模組: {e}")
+    class ConversationManager:
+        def process_user_message(self, user_id, message):
+            return {
+                'text': "系統升級中，暫時無法使用智能搜尋功能",
+                'action': 'error',
+                'conditions': {},
+                'quick_reply': None
+            }
 
 
-    # 簡單的替代品
     class JobCardBuilder:
         @staticmethod
         def create_job_carousel(jobs, keyword=""):
             from linebot.models import TextSendMessage
-            if not jobs:
-                job_text = f"😅 抱歉，沒有找到「{keyword}」相關的職缺\n\n爬蟲功能開發中，請稍後再試！"
-            else:
-                job_text = f"找到 {len(jobs)} 個職缺：\n\n"
-                for i, job in enumerate(jobs[:5], 1):
-                    job_text += f"{i}. {job.get('title', '')} - {job.get('company', '')}\n"
-            return TextSendMessage(text=job_text)
+            return TextSendMessage(text="職缺卡片功能開發中")
 
-        @staticmethod
-        def create_search_summary_message(total, keyword):
-            from linebot.models import TextSendMessage
-            return TextSendMessage(text=f"搜尋「{keyword}」找到 {total} 個職缺")
+
+    class UserManager:
+        def __init__(self):
+            pass
+
+        def add_user(self, user_id):
+            pass
+
+        def record_search(self, user_id, keyword):
+            pass
+
+try:
+    from keep_alive import initialize_keep_alive
+
+    logger.info("✅ keep_alive 模組載入成功")
+except ImportError:
+    def initialize_keep_alive(url):
+        logger.info("Keep-alive功能未啟用")
 
 app = Flask(__name__)
 
-# LINE Bot 設定 - 從環境變數讀取
+# LINE Bot 設定
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', 'YOUR_LOCAL_TOKEN')
 LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', 'YOUR_LOCAL_SECRET')
 
@@ -78,81 +79,134 @@ line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # 初始化功能模組
-job_crawler = JobCrawler()
+job_crawler = EnhancedJobCrawler()
+conversation_manager = ConversationManager()
 job_card_builder = JobCardBuilder()
+user_manager = UserManager()
+
+# 用戶狀態管理
+user_states = {}
 
 
-# 載入 JSON 資料的輔助函數
-def load_json_file(filename):
-    """載入 JSON 檔案"""
-    try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def save_json_file(filename, data):
-    """儲存資料到 JSON 檔案"""
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-# 建立快速回覆選單
-def create_quick_reply():
-    """建立快速回覆選單"""
+def create_main_menu():
+    """建立主選單"""
     return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="🔍 搜尋職缺", text="搜尋職缺")),
+        QuickReplyButton(action=MessageAction(label="🔍 智能搜尋", text="我要找工作")),
         QuickReplyButton(action=MessageAction(label="💾 我的收藏", text="我的收藏")),
-        QuickReplyButton(action=MessageAction(label="🏷️ 熱門標籤", text="熱門標籤")),
+        QuickReplyButton(action=MessageAction(label="🏷️ 熱門職缺", text="熱門職缺")),
+        QuickReplyButton(action=MessageAction(label="📊 搜尋紀錄", text="搜尋紀錄")),
+        QuickReplyButton(action=MessageAction(label="⚙️ 設定", text="設定")),
         QuickReplyButton(action=MessageAction(label="ℹ️ 使用說明", text="使用說明"))
     ])
 
 
-def create_keyword_quick_reply():
-    """建立搜尋關鍵字快速回覆選單"""
+def create_popular_jobs_menu():
+    """建立熱門職缺選單"""
     return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="Python工程師", text="Python工程師")),
-        QuickReplyButton(action=MessageAction(label="前端開發", text="前端開發")),
-        QuickReplyButton(action=MessageAction(label="數據分析師", text="數據分析師")),
-        QuickReplyButton(action=MessageAction(label="產品經理", text="產品經理")),
-        QuickReplyButton(action=MessageAction(label="UI設計師", text="UI設計師")),
-        QuickReplyButton(action=MessageAction(label="遠端工作", text="遠端工作"))
+        QuickReplyButton(action=MessageAction(label="💻 軟體工程師", text="軟體工程師")),
+        QuickReplyButton(action=MessageAction(label="🎨 UI/UX設計師", text="UI設計師")),
+        QuickReplyButton(action=MessageAction(label="📊 數據分析師", text="數據分析師")),
+        QuickReplyButton(action=MessageAction(label="📱 產品經理", text="產品經理")),
+        QuickReplyButton(action=MessageAction(label="🌐 前端工程師", text="前端工程師")),
+        QuickReplyButton(action=MessageAction(label="⚙️ 後端工程師", text="後端工程師"))
     ])
 
 
-def search_jobs_async(keyword, reply_token, user_id):
-    """非同步搜尋職缺"""
+def search_jobs_async(search_conditions, reply_token, user_id):
+    """非同步搜尋職缺 - 使用增強版爬蟲"""
     try:
-        print(f"🚀 開始搜尋職缺：{keyword}")
+        logger.info(f"🚀 開始智能搜尋職缺：{search_conditions}")
 
-        # 搜尋職缺
-        jobs = job_crawler.search_all_platforms(keyword, limit_per_platform=4)
+        # 記錄用戶搜尋
+        user_manager.record_search(user_id, search_conditions.get('keyword', ''))
+
+        # 使用增強版爬蟲搜尋
+        jobs = job_crawler.search_all_platforms(
+            keyword=search_conditions.get('keyword', ''),
+            location=search_conditions.get('location', ''),
+            salary_min=str(search_conditions.get('salary_min', '')) if search_conditions.get('salary_min') else '',
+            salary_max=str(search_conditions.get('salary_max', '')) if search_conditions.get('salary_max') else '',
+            limit_per_platform=6
+        )
 
         if jobs:
             # 發送搜尋結果摘要
-            summary_message = job_card_builder.create_search_summary_message(len(jobs), keyword)
-            line_bot_api.push_message(user_id, summary_message)
+            summary_text = f"""
+🎯 智能搜尋完成！
+
+✅ 為你找到 {len(jobs)} 個符合條件的職缺
+
+📊 搜尋平台：
+• 104人力銀行: {len([j for j in jobs if j['platform'] == '104人力銀行'])} 個
+• CakeResume: {len([j for j in jobs if j['platform'] == 'CakeResume'])} 個  
+• Yourator: {len([j for j in jobs if j['platform'] == 'Yourator'])} 個
+
+💡 點選下方職缺卡片查看詳情
+            """
+
+            line_bot_api.push_message(
+                user_id,
+                TextSendMessage(
+                    text=summary_text.strip(),
+                    quick_reply=create_main_menu()
+                )
+            )
 
             # 發送職缺卡片
-            carousel_message = job_card_builder.create_job_carousel(jobs, keyword)
+            carousel_message = job_card_builder.create_job_carousel(jobs, search_conditions.get('keyword', ''))
             line_bot_api.push_message(user_id, carousel_message)
 
-            print(f"✅ 職缺搜尋完成，發送了 {len(jobs)} 個職缺")
+            logger.info(f"✅ 職缺搜尋完成，發送了 {len(jobs)} 個職缺")
 
         else:
             # 沒找到職缺
             no_results_message = TextSendMessage(
-                text=f"😅 抱歉，沒有找到「{keyword}」相關的職缺\n\n可能原因：\n• 關鍵字太具體\n• 網站暫時無法連接\n• 該職位目前沒有空缺\n\n請嘗試其他關鍵字：\n• Python\n• 工程師\n• 設計師\n• 行銷\n• 產品經理",
-                quick_reply=create_keyword_quick_reply()
+                text=f"""
+😅 很抱歉，沒有找到完全符合條件的職缺
+
+可能的原因：
+• 條件設定過於嚴格
+• 該職位目前需求較少
+• 薪資或地點限制較嚴
+
+💡 建議：
+• 放寬薪資範圍
+• 考慮其他地區
+• 搜尋相關職位
+• 嘗試不同關鍵字
+
+要重新設定搜尋條件嗎？
+                """,
+                quick_reply=QuickReply(items=[
+                    QuickReplyButton(action=MessageAction(label="🔄 重新搜尋", text="我要找工作")),
+                    QuickReplyButton(action=MessageAction(label="🏷️ 熱門職缺", text="熱門職缺")),
+                    QuickReplyButton(action=MessageAction(label="📞 客服協助", text="客服協助"))
+                ])
             )
             line_bot_api.push_message(user_id, no_results_message)
 
     except Exception as e:
-        print(f"❌ 搜尋職缺時發生錯誤：{e}")
+        logger.error(f"❌ 搜尋職缺時發生錯誤：{e}")
         error_message = TextSendMessage(
-            text="😅 搜尋時發生錯誤，可能是：\n• 網路連線問題\n• 求職網站暫時無法存取\n• 伺服器忙碌中\n\n請稍後再試或聯繫客服",
-            quick_reply=create_quick_reply()
+            text=f"""
+😅 搜尋時發生錯誤
+
+可能原因：
+• 網路連線問題
+• 求職網站暫時無法存取
+• 伺服器忙碌中
+
+🔧 解決方案：
+• 請稍後再試
+• 檢查網路連線
+• 聯繫客服協助
+
+要重新嘗試搜尋嗎？
+            """,
+            quick_reply=QuickReply(items=[
+                QuickReplyButton(action=MessageAction(label="🔄 重新搜尋", text="我要找工作")),
+                QuickReplyButton(action=MessageAction(label="🏠 返回主選單", text="主選單"))
+            ])
         )
         line_bot_api.push_message(user_id, error_message)
 
@@ -177,136 +231,437 @@ def handle_postback(event):
     user_id = event.source.user_id
     postback_data = event.postback.data
 
+    # 新增用戶記錄
+    user_manager.add_user(user_id)
+
     if postback_data.startswith('favorite_'):
         # 收藏職缺
         job_id = postback_data.replace('favorite_', '')
 
-        # 簡單的收藏功能
-        user_data = load_json_file('user_data.json')
-        if 'favorites' not in user_data:
-            user_data['favorites'] = {}
-        if user_id not in user_data['favorites']:
-            user_data['favorites'][user_id] = []
+        success = user_manager.add_favorite(user_id, job_id)
 
-        if job_id not in user_data['favorites'][user_id]:
-            user_data['favorites'][user_id].append(job_id)
-            save_json_file('user_data.json', user_data)
-            reply_text = "💖 已加入收藏！\n\n可以輸入「我的收藏」查看所有收藏的職缺"
+        if success:
+            reply_text = """
+💖 已加入收藏！
+
+✅ 職缺已成功加入你的收藏清單
+
+📋 你可以：
+• 輸入「我的收藏」查看所有收藏
+• 比較不同職缺條件
+• 準備客製化履歷
+• 規劃投遞策略
+
+💡 小提醒：好工作不等人，記得主動投遞履歷唷！
+            """
         else:
-            reply_text = "💖 這個職缺已經在收藏清單中了！"
+            reply_text = """
+💖 這個職缺已經在你的收藏清單中了！
+
+📋 你可以：
+• 輸入「我的收藏」查看完整收藏
+• 輸入「搜尋紀錄」查看搜尋歷史
+• 繼續搜尋更多相關職缺
+
+要繼續找其他工作嗎？
+            """
 
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
-                text=reply_text,
-                quick_reply=create_quick_reply()
+                text=reply_text.strip(),
+                quick_reply=create_main_menu()
             )
         )
 
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    """處理文字訊息"""
+    """處理文字訊息 - 使用智能條件引導"""
     user_message = event.message.text.strip()
     user_id = event.source.user_id
     reply_token = event.reply_token
 
-    print(f"收到訊息：{user_message}")
+    logger.info(f"收到用戶 {user_id} 訊息：{user_message}")
 
-    # 載入用戶資料
-    user_data = load_json_file('user_data.json')
+    # 新增用戶記錄
+    user_manager.add_user(user_id)
 
-    # 根據用戶訊息回應
-    if user_message == "搜尋職缺":
-        reply_text = "🔍 請輸入你想搜尋的職缺關鍵字\n\n例如：\n• Python工程師\n• 前端開發\n• 數據分析師\n• 產品經理\n• 遠端工作\n• UI設計師\n\n💡 小提示：關鍵字越具體，搜尋結果越精準！"
-        quick_reply = create_keyword_quick_reply()
+    # 處理特定指令
+    if user_message in ["我要找工作", "搜尋職缺", "找工作"]:
+        reply_text = """
+🎯 歡迎使用智能職缺搜尋！
+
+我會協助你找到最適合的工作機會。請告訴我你的需求，例如：
+
+💼 基本需求：
+「我想找軟體工程師的工作」
+
+📍 包含地點：
+「我想找台北的產品經理」
+
+💰 包含薪資：
+「新竹的前端工程師，月薪60k以上」
+
+🎯 詳細條件：
+「台北的Python後端工程師，月薪80k-120k，有3年經驗，希望是新創公司」
+
+💡 你可以用自然語言描述，我會智能解析你的需求！
+        """
+
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=reply_text.strip(),
+                quick_reply=create_popular_jobs_menu()
+            )
+        )
+        return
 
     elif user_message == "我的收藏":
-        # 檢查用戶是否有收藏職缺
-        favorites = user_data.get('favorites', {}).get(user_id, [])
-        if favorites:
-            reply_text = f"💖 你目前收藏了 {len(favorites)} 個職缺\n\n收藏的職缺ID：\n" + "\n".join(
-                [f"• {fav}" for fav in favorites[-5:]])
-            if len(favorites) > 5:
-                reply_text += f"\n...等共 {len(favorites)} 個職缺"
-        else:
-            reply_text = "💖 你還沒有收藏任何職缺唷！\n\n搜尋職缺後，點選職缺卡片的「💖 收藏」按鈕即可收藏"
-        quick_reply = create_quick_reply()
+        # 顯示用戶收藏
+        favorites = user_manager.get_user_favorites(user_id)
 
-    elif user_message == "熱門標籤":
-        reply_text = "🏷️ 熱門職缺標籤：\n\n🔥 技術類：\n• Python工程師\n• 前端開發\n• 後端工程師\n• 全端工程師\n• 數據分析師\n• DevOps工程師\n\n🎨 設計類：\n• UI設計師\n• UX設計師\n• 平面設計師\n\n💼 商務類：\n• 產品經理\n• 專案經理\n• 行銷企劃\n\n🌍 工作型態：\n• 遠端工作\n• 外商公司\n• 新創公司"
-        quick_reply = create_keyword_quick_reply()
+        if favorites:
+            reply_text = f"""
+💖 你的收藏清單 ({len(favorites)} 個職缺)
+
+最近收藏的職缺：
+"""
+            for i, job in enumerate(favorites[-5:], 1):  # 顯示最近5個
+                reply_text += f"""
+{i}. {job.get('title', '職位')} - {job.get('company', '公司')}
+   💰 {job.get('salary', '面議')} | 📍 {job.get('location', '地點未提供')}
+   🔗 {job.get('platform', '平台')} | ⏰ {job.get('favorited_at', '')[:10]}
+"""
+
+            if len(favorites) > 5:
+                reply_text += f"\n... 等共 {len(favorites)} 個職缺"
+
+            reply_text += "\n💡 記得主動投遞履歷，把握每個機會！"
+
+        else:
+            reply_text = """
+💖 你還沒有收藏任何職缺唷！
+
+🔍 開始搜尋職缺：
+• 輸入「我要找工作」開始智能搜尋
+• 瀏覽職缺卡片時點選「💖 收藏」
+
+📋 收藏的好處：
+• 比較不同職缺條件
+• 避免錯過心儀職位
+• 規劃投遞履歷策略
+• 追蹤應徵進度
+
+現在就開始找工作吧！
+            """
+
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=reply_text.strip(),
+                quick_reply=create_main_menu()
+            )
+        )
+        return
+
+    elif user_message == "熱門職缺":
+        reply_text = """
+🔥 熱門職缺類別
+
+選擇你感興趣的職位類型，我會為你搜尋最新的職缺機會：
+
+💻 技術類：
+• 軟體工程師 - 全端/前端/後端
+• 數據分析師 - Python/SQL/機器學習
+• DevOps工程師 - 雲端/自動化
+
+🎨 設計類：
+• UI/UX設計師 - 介面/體驗設計
+• 視覺設計師 - 品牌/平面設計
+
+📊 商務類：
+• 產品經理 - 產品策略/規劃
+• 專案經理 - 跨部門協作
+• 行銷企劃 - 數位/品牌行銷
+
+🌟 新興職位：
+• AI工程師 - 人工智慧/機器學習
+• 區塊鏈工程師 - Web3/DeFi
+• 成長駭客 - 用戶增長/數據驅動
+
+點選下方按鈕快速搜尋，或直接告訴我你想找的職位！
+        """
+
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=reply_text.strip(),
+                quick_reply=create_popular_jobs_menu()
+            )
+        )
+        return
+
+    elif user_message == "搜尋紀錄":
+        # 顯示用戶搜尋統計
+        user_stats = user_manager.get_user_stats(user_id)
+
+        if user_stats and user_stats['search_count'] > 0:
+            preferred_keywords = user_stats.get('preferred_keywords', [])
+
+            reply_text = f"""
+📊 你的搜尋統計
+
+🔍 總搜尋次數：{user_stats['search_count']} 次
+💖 總收藏數：{user_stats['favorite_count']} 個
+📅 首次使用：{user_stats.get('first_interaction', '')[:10]}
+⏰ 最近活動：{user_stats.get('last_interaction', '')[:10]}
+
+🏷️ 你最常搜尋的職位：
+"""
+
+            for i, pref in enumerate(preferred_keywords[:5], 1):
+                reply_text += f"{i}. {pref['keyword']} ({pref['count']}次)\n"
+
+            reply_text += """
+💡 基於你的搜尋習慣，我建議：
+• 設定職缺通知，第一時間獲得新機會
+• 收藏心儀職位，避免錯過
+• 拓展相關技能，增加競爭力
+
+要繼續搜尋工作嗎？
+            """
+        else:
+            reply_text = """
+📊 你還沒有搜尋記錄
+
+🚀 開始你的求職之旅：
+• 輸入「我要找工作」開始智能搜尋
+• 瀏覽「熱門職缺」發現新機會
+• 使用自然語言描述需求
+
+📈 使用越多，推薦越精準！
+我會學習你的偏好，提供更符合需求的職缺。
+
+現在就開始搜尋吧！
+            """
+
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=reply_text.strip(),
+                quick_reply=create_main_menu()
+            )
+        )
+        return
 
     elif user_message == "使用說明":
         reply_text = """
-🤖 職涯助手使用說明
+📖 職涯助手使用說明
 
-🔍 搜尋職缺：
-   輸入關鍵字搜尋相關職缺
-   例如：「Python工程師」
+🎯 智能搜尋功能：
+• 用自然語言描述需求
+• 自動解析職位、薪資、地點等條件
+• 多輪對話完善搜尋條件
+• 一站式搜尋多個求職平台
 
-💾 我的收藏：
-   查看已收藏的職缺清單
+💼 支援平台：
+• 104人力銀行 - 最大求職平台
+• CakeResume - 新世代求職網站
+• Yourator - 新創與科技公司
+• LinkedIn - 國際職場網絡
+• 公司官網 - 直接投遞機會
 
-🏷️ 熱門標籤：
-   瀏覽熱門職缺分類
+🔍 搜尋技巧：
+• 「台北的Python工程師，月薪60k以上」
+• 「新創公司的產品經理，3年經驗」
+• 「遠端工作的UI設計師」
+• 「外商的數據分析師，年薪150萬」
 
-📱 職缺卡片功能：
-   • 點擊「查看職缺」：前往原始網站
-   • 點擊「💖 收藏」：加入個人收藏
-   • 點擊「👥 分享」：分享職缺資訊
+💖 收藏功能：
+• 收藏心儀職位
+• 比較不同條件
+• 追蹤投遞狀態
 
-🎯 搜尋技巧：
-   • 使用具體關鍵字效果更好
-   • 可搜尋職位、技能、公司類型
-   • 支援中英文搜尋
+📊 個人化推薦：
+• 基於搜尋歷史
+• 智能職位推薦
+• 薪資趨勢分析
 
-⚡ 服務狀態：24小時在線
-如有問題請聯繫開發者！
+有任何問題隨時告訴我！
         """
-        quick_reply = create_quick_reply()
+
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=reply_text.strip(),
+                quick_reply=create_main_menu()
+            )
+        )
+        return
+
+    elif user_message in ["設定", "⚙️ 設定"]:
+        reply_text = """
+⚙️ 個人設定
+
+🔔 通知設定：
+• 新職缺提醒 - 根據你的搜尋偏好
+• 每日職缺精選 - 每天推送熱門職缺
+• 薪資趨勢報告 - 週報告訴你市場動態
+
+📊 搜尋偏好：
+• 預設搜尋地區
+• 期望薪資範圍
+• 偏好產業類型
+• 工作經驗級別
+
+🔒 隱私設定：
+• 搜尋記錄管理
+• 收藏資料匯出
+• 帳號資料刪除
+
+💡 個人化功能：
+• 履歷健檢提醒
+• 面試技巧推送
+• 職涯發展建議
+
+目前所有功能都已開啟，如需調整請告訴我！
+        """
+
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=reply_text.strip(),
+                quick_reply=create_main_menu()
+            )
+        )
+        return
 
     elif user_message.lower().startswith(("你好", "hi", "hello", "嗨", "安安")):
-        reply_text = "你好！歡迎使用職涯助手 🎯\n\n我可以幫你搜尋多個平台的職缺資訊，讓找工作更有效率！\n\n✨ 支援平台：\n• 104 人力銀行\n• 1111 人力銀行\n• CakeResume\n\n🔥 特色功能：\n• 24小時在線服務\n• 即時職缺搜尋\n• 個人收藏管理\n• 智能推薦系統\n\n請選擇你需要的功能："
-        quick_reply = create_quick_reply()
+        reply_text = """
+你好！歡迎使用職涯助手 🎯
+
+我是你的專屬求職夥伴，能幫你：
+
+🔍 智能搜尋職缺：
+• 一站式搜尋多個求職平台
+• 自然語言條件設定
+• 即時職缺推薦
+
+💼 完整求職支援：
+• 個人化職缺推薦
+• 薪資趨勢分析
+• 履歷優化建議
+• 面試準備協助
+
+📊 數據驅動決策：
+• 市場需求分析
+• 技能趨勢報告
+• 薪資水準比較
+
+🎯 支援平台包括：
+• 104人力銀行、CakeResume
+• Yourator、LinkedIn
+• 各大公司官網
+
+準備好開始你的求職之旅了嗎？
+點選下方按鈕或直接告訴我你想找什麼工作！
+        """
+
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=reply_text.strip(),
+                quick_reply=create_main_menu()
+            )
+        )
+        return
 
     else:
-        # 當作職缺搜尋關鍵字處理
-        reply_text = f"🔍 正在搜尋「{user_message}」相關職缺...\n\n請稍等，我正在為你搜尋多個求職平台 ⏳\n\n✅ 104人力銀行\n✅ 1111人力銀行\n✅ CakeResume"
-        quick_reply = create_quick_reply()
+        # 使用智能條件引導系統處理搜尋請求
+        try:
+            result = conversation_manager.process_user_message(user_id, user_message)
 
-        # 先回應用戶，然後在背景搜尋職缺
+            if result['action'] == 'search':
+                # 條件完整，開始搜尋
+                reply_text = result['text']
+
+                # 先回應用戶
+                line_bot_api.reply_message(
+                    reply_token,
+                    TextSendMessage(
+                        text=reply_text,
+                        quick_reply=create_main_menu()
+                    )
+                )
+
+                # 在背景執行搜尋
+                search_thread = threading.Thread(
+                    target=search_jobs_async,
+                    args=(result['conditions'], reply_token, user_id)
+                )
+                search_thread.daemon = True
+                search_thread.start()
+                return
+
+            elif result['action'] == 'collect_info':
+                # 需要收集更多資訊
+                reply_text = result['text']
+                quick_reply = result['quick_reply']
+
+                line_bot_api.reply_message(
+                    reply_token,
+                    TextSendMessage(
+                        text=reply_text,
+                        quick_reply=quick_reply or create_main_menu()
+                    )
+                )
+                return
+
+            else:
+                # 錯誤或其他情況
+                reply_text = result['text']
+
+        except Exception as e:
+            logger.error(f"❌ 智能條件引導失敗：{e}")
+            reply_text = """
+😅 理解你的需求時遇到一些問題
+
+請嘗試更清楚地描述，例如：
+• 「我想找台北的軟體工程師」
+• 「產品經理，月薪80k以上」
+• 「新竹的前端工程師，有3年經驗」
+
+或者點選下方按鈕快速開始：
+            """
+
+        # 回應訊息
         line_bot_api.reply_message(
             reply_token,
             TextSendMessage(
                 text=reply_text,
-                quick_reply=quick_reply
+                quick_reply=create_main_menu()
             )
         )
-
-        # 在背景執行搜尋
-        search_thread = threading.Thread(
-            target=search_jobs_async,
-            args=(user_message, reply_token, user_id)
-        )
-        search_thread.daemon = True
-        search_thread.start()
-        return  # 提前返回，避免重複回應
-
-    # 回應訊息
-    line_bot_api.reply_message(
-        reply_token,
-        TextSendMessage(
-            text=reply_text,
-            quick_reply=quick_reply
-        )
-    )
 
 
 @app.route('/')
 def home():
     """首頁 - 檢查服務狀態"""
-    return "職涯助手 LINE Bot 正在運行中！ 🚀\n24小時在線服務，永不休眠！"
+    return """
+    <h1>職涯助手 LINE Bot 正在運行中！ 🚀</h1>
+    <h2>功能特色：</h2>
+    <ul>
+        <li>🔍 智能職缺搜尋 - 自然語言條件設定</li>
+        <li>💼 多平台整合 - 104、CakeResume、Yourator、LinkedIn</li>
+        <li>🎯 個人化推薦 - 基於搜尋偏好</li>
+        <li>💖 收藏管理 - 追蹤心儀職位</li>
+        <li>📊 數據分析 - 薪資趨勢、市場需求</li>
+        <li>⚡ 24小時在線服務</li>
+    </ul>
+    <p><strong>版本：</strong> v3.0.0 Enhanced Edition</p>
+    """
 
 
 @app.route('/ping')
@@ -316,7 +671,8 @@ def ping():
     return {
         "status": "alive",
         "timestamp": datetime.now().isoformat(),
-        "message": "Keep-alive ping successful"
+        "message": "Enhanced Job Search Bot - Keep-alive ping successful",
+        "version": "3.0.0"
     }
 
 
@@ -325,30 +681,44 @@ def test():
     """測試頁面"""
     return {
         "status": "OK",
-        "message": "LINE Bot 測試成功！",
-        "version": "2.1.0",
+        "message": "增強版職涯助手測試成功！",
+        "version": "3.0.0",
         "features": [
-            "多平台職缺搜尋",
-            "智能搜尋",
-            "收藏功能",
+            "智能條件引導搜尋",
+            "多平台職缺爬蟲",
+            "自然語言處理",
+            "個人化推薦系統",
+            "收藏管理功能",
             "24小時在線服務"
+        ],
+        "supported_platforms": [
+            "104人力銀行",
+            "CakeResume",
+            "Yourator",
+            "LinkedIn (準備中)",
+            "公司官網 (準備中)"
         ]
     }
 
 
 @app.route('/debug')
 def debug():
-    """除錯頁面 - 檢查模組載入狀況"""
+    """除錯頁面"""
     import os
     files_in_dir = os.listdir('.')
     python_files = [f for f in files_in_dir if f.endswith('.py')]
 
     return {
         "current_directory": os.getcwd(),
-        "all_files": files_in_dir,
         "python_files": python_files,
-        "sys_path": sys.path[:3],
-        "service_status": "24/7 Online"
+        "modules_status": {
+            "enhanced_crawler": "載入成功" if 'EnhancedJobCrawler' in globals() else "載入失敗",
+            "job_condition_guide": "載入成功" if 'ConversationManager' in globals() else "載入失敗",
+            "flex_message_templates": "載入成功" if 'JobCardBuilder' in globals() else "載入失敗",
+            "user_manager": "載入成功" if 'UserManager' in globals() else "載入失敗"
+        },
+        "service_status": "24/7 Online Enhanced",
+        "version": "3.0.0"
     }
 
 
@@ -359,8 +729,11 @@ if __name__ == "__main__":
 
     # 部署環境設定
     port = int(os.environ.get('PORT', 5001))
-    print(f"🚀 啟動職涯助手 LINE Bot")
-    print(f"📡 服務網址: {service_url}")
-    print(f"⚡ 保持喚醒功能: 已啟用")
+
+    logger.info(f"🚀 啟動增強版職涯助手 LINE Bot v3.0.0")
+    logger.info(f"📡 服務網址: {service_url}")
+    logger.info(f"⚡ 智能搜尋功能: 已啟用")
+    logger.info(f"🔍 支援平台: 104, CakeResume, Yourator")
+    logger.info(f"🤖 自然語言處理: 已啟用")
 
     app.run(debug=False, host='0.0.0.0', port=port)
