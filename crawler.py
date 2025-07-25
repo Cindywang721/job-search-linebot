@@ -55,7 +55,7 @@ class JobCrawler:
         salary = re.sub(r'(月薪|年薪|時薪|待遇|薪資|NT\$|\$)', '', salary_text)
         salary = self.clean_text(salary)
 
-        # 如果包含數字，保留；否則返回面議
+        # 檢查是否包含數字 - 修正語法錯誤
         if re.search(r'\d', salary):
             return salary
         return "面議"
@@ -147,7 +147,9 @@ class JobCrawler:
                     salary_elem = card.find('span', class_='b-tag') or card.find('span', class_='job-list-tag')
                     if salary_elem:
                         salary_text = salary_elem.get_text()
-                        if '萬' in salary_text or '千' in salary_text or ' in salary_text or any(char.isdigit() for char in salary_text):
+                        # 修正語法錯誤 - 簡化條件判斷
+                        if any(keyword in salary_text for keyword in ['萬', '千', '$']) or any(
+                                char.isdigit() for char in salary_text):
                             salary = self.extract_salary(salary_text)
 
                     # 提取職缺連結
@@ -306,70 +308,6 @@ class JobCrawler:
 
         return jobs
 
-    def crawl_yourator_jobs(self, keyword, limit=10):
-        """爬取 Yourator 職缺 - 真實搜尋"""
-        jobs = []
-
-        try:
-            # Yourator 搜尋 URL
-            encoded_keyword = urllib.parse.quote(keyword)
-            search_url = f"https://www.yourator.co/jobs?q={encoded_keyword}"
-
-            print(f"🔍 正在搜尋 Yourator 職缺：{keyword}")
-            response = self.session.get(search_url, timeout=15)
-
-            if response.status_code != 200:
-                print(f"❌ Yourator 請求失敗，狀態碼：{response.status_code}")
-                return jobs
-
-            soup = BeautifulSoup(response.text, 'html.parser')
-
-            # 根據實際的HTML結構調整選擇器
-            job_cards = soup.find_all('div', class_='job-item') or soup.find_all('a', class_='job-link')
-
-            for i, card in enumerate(job_cards[:limit]):
-                try:
-                    # 基於Yourator的實際結構提取資訊
-                    title_elem = card.find('h3') or card.find('h4') or card.find('div', class_='job-title')
-                    title = self.clean_text(title_elem.get_text()) if title_elem else ""
-
-                    company_elem = card.find('div', class_='company-name') or card.find('span', class_='company')
-                    company = self.clean_text(company_elem.get_text()) if company_elem else ""
-
-                    # 獲取公司Logo
-                    logo_url = self.get_company_logo(company)
-
-                    if title and company:
-                        job_data = {
-                            "id": f"yourator_{int(time.time())}_{i}",
-                            "title": title,
-                            "company": company,
-                            "salary": "面議",
-                            "location": "台北市",
-                            "url": f"https://www.yourator.co/jobs?q={encoded_keyword}",
-                            "platform": "Yourator",
-                            "logo_url": logo_url,
-                            "description": f"{title} - {company}",
-                            "requirements": ["請查看個別職缺詳情"],
-                            "tags": ["yourator", keyword.lower()],
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        }
-                        jobs.append(job_data)
-                        print(f"✅ Yourator職缺 {i + 1}: {title} - {company}")
-
-                    self.delay_random()
-
-                except Exception as e:
-                    print(f"❌ 解析Yourator職缺 {i + 1} 時發生錯誤：{e}")
-                    continue
-
-            print(f"🎉 Yourator 搜尋完成，找到 {len(jobs)} 個職缺")
-
-        except Exception as e:
-            print(f"❌ 爬取 Yourator 職缺失敗：{e}")
-
-        return jobs
-
     def search_all_platforms(self, keyword, limit_per_platform=5):
         """搜尋所有平台的職缺"""
         print(f"🚀 開始搜尋關鍵字：{keyword}")
@@ -391,15 +329,6 @@ class JobCrawler:
             all_jobs.extend(jobs_1111)
         except Exception as e:
             print(f"❌ 1111搜尋失敗：{e}")
-
-        self.delay_random()
-
-        # 搜尋 Yourator
-        try:
-            jobs_yourator = self.crawl_yourator_jobs(keyword, limit_per_platform)
-            all_jobs.extend(jobs_yourator)
-        except Exception as e:
-            print(f"❌ Yourator搜尋失敗：{e}")
 
         print(f"🎉 搜尋完成！總共找到 {len(all_jobs)} 個職缺")
 
@@ -433,18 +362,11 @@ def test_crawler():
     crawler = JobCrawler()
 
     # 測試搜尋
-    test_keywords = ["Python", "前端工程師", "數據分析"]
+    jobs = crawler.search_all_platforms("Python", 3)
 
-    for keyword in test_keywords:
-        print(f"\n🧪 測試關鍵字: {keyword}")
-        jobs = crawler.search_all_platforms(keyword, 2)
-
-        print(f"\n📋 搜尋結果預覽：")
-        for job in jobs[:3]:
-            print(f"• {job['title']} - {job['company']} ({job['platform']})")
-            print(f"  💰 {job['salary']} | 📍 {job['location']}")
-            print(f"  🏢 Logo: {job['logo_url']}")
-            print()
+    print("\n📋 搜尋結果預覽：")
+    for job in jobs[:3]:
+        print(f"• {job['title']} - {job['company']} ({job['platform']})")
 
 
 if __name__ == "__main__":
