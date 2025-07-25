@@ -8,7 +8,6 @@ import re
 import urllib.parse
 from urllib.parse import urlencode
 import logging
-from fake_useragent import UserAgent
 
 # 設置日誌
 logging.basicConfig(level=logging.INFO)
@@ -17,20 +16,23 @@ logger = logging.getLogger(__name__)
 
 class EnhancedJobCrawler:
     def __init__(self):
-        # 使用隨機 User-Agent
-        self.ua = UserAgent()
+        # 簡化的 User-Agent 列表（不使用 fake-useragent）
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'
+        ]
+
         self.session = requests.Session()
 
         # 反爬蟲設置
         self.headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
             'Cache-Control': 'max-age=0'
         }
 
@@ -42,7 +44,7 @@ class EnhancedJobCrawler:
     def get_headers(self):
         """獲取隨機 User-Agent"""
         headers = self.headers.copy()
-        headers['User-Agent'] = self.ua.random
+        headers['User-Agent'] = random.choice(self.user_agents)
         return headers
 
     def delay_random(self, min_delay=2, max_delay=5):
