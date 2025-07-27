@@ -106,64 +106,144 @@ class JobConditionGuide:
         return conditions
 
     def _extract_job_title(self, text, words):
-        """提取職位名稱 - 擴展支援更多職位"""
-        # 常見職位關鍵字
-        job_keywords = [
-            # 技術類
-            '工程師', '程式設計師', '開發者', '軟體', '前端', '後端', '全端', 'python', 'java', 'javascript',
-            'react', 'vue', 'angular', 'nodejs', 'php', 'ios', 'android', 'devops', '資安', '測試',
+        """提取職位名稱 - 完全重寫，確保準確性"""
+
+        # 直接職位映射（最高優先級）
+        direct_job_mapping = {
+            # 商務管理類
+            '產品經理': '產品經理',
+            '專案經理': '專案經理',
+            '產品manager': '產品經理',
+            'pm': '產品經理',
+            'product manager': '產品經理',
+            'project manager': '專案經理',
 
             # 設計類
-            '設計師', 'ui', 'ux', '視覺', '平面', '網頁設計', '產品設計', '美術', '創意',
+            'ui設計師': 'UI設計師',
+            'ux設計師': 'UX設計師',
+            'ui/ux': 'UI/UX設計師',
+            '視覺設計師': '視覺設計師',
+            '平面設計師': '平面設計師',
+            '網頁設計師': '網頁設計師',
 
-            # 商務類
-            '經理', '專案經理', '產品經理', '業務', '銷售', '行銷', '企劃', '營運', '客服',
+            # 工程師類
+            '軟體工程師': '軟體工程師',
+            '前端工程師': '前端工程師',
+            '後端工程師': '後端工程師',
+            '全端工程師': '全端工程師',
+            'python工程師': 'Python工程師',
+            'java工程師': 'Java工程師',
+            'javascript工程師': 'JavaScript工程師',
 
             # 數據類
-            '數據', '分析師', '資料科學', 'data', 'analyst', 'scientist', 'bi', '商業智能',
+            '數據分析師': '數據分析師',
+            '資料分析師': '數據分析師',
+            '資料科學家': '資料科學家',
+            'data analyst': '數據分析師',
+            'data scientist': '資料科學家',
 
             # 營運類
-            '營運', '運營', '採購', '人資', '會計', '財務', '法務', '稽核',
+            '營運專員': '營運專員',
+            '行銷專員': '行銷專員',
+            '業務代表': '業務代表',
+            '客服專員': '客服專員',
 
-            # 其他
-            '編輯', '文案', '翻譯', '老師', '講師', '顧問', '助理', '實習', '新鮮人'
+            # 財務會計類
+            '會計師': '會計師',
+            '財務專員': '財務專員',
+            '稽核': '稽核',
+
+            # 人力資源類
+            '人資專員': '人資專員',
+            '人力資源': '人資專員',
+            'hr': '人資專員',
+
+            # 其他專業類
+            '法務': '法務專員',
+            '律師': '律師',
+            '護理師': '護理師',
+            '醫師': '醫師',
+            '老師': '老師',
+            '講師': '講師',
+            '翻譯': '翻譯',
+            '編輯': '編輯',
+            '記者': '記者',
+
+            # 技術支援類
+            '系統管理員': '系統管理員',
+            'devops': 'DevOps工程師',
+            '測試工程師': '測試工程師',
+            '品質保證': 'QA工程師',
+            '資安工程師': '資安工程師',
+
+            # 銷售類
+            '銷售': '業務代表',
+            '業務': '業務代表',
+            'sales': '業務代表',
+
+            # 實習/新鮮人
+            '實習生': '實習生',
+            '新鮮人': '新鮮人職缺',
+            '應屆畢業生': '新鮮人職缺'
+        }
+
+        # 將輸入文字轉為小寫進行比對
+        text_lower = text.lower().strip()
+
+        # 1. 直接完全匹配
+        for key, value in direct_job_mapping.items():
+            if key in text_lower:
+                return value
+
+        # 2. 從原始文字中提取關鍵詞
+        # 移除條件詞和常見修飾詞
+        condition_words = [
+            '薪資', '薪水', '月薪', '年薪', '地點', '台北', '新竹', '台中', '台南', '高雄', '桃園', '新北',
+            '遠端', '年經驗', '經驗', '新鮮人', '萬', '以上', '以下', '左右', '大約', '希望', '想要',
+            '找', '工作', '職缺', '的', '我', '想', '要', '有', '年', '以上', '外商', '新創'
         ]
 
-        # 移除條件詞
-        condition_words = ['薪資', '薪水', '地點', '台北', '新竹', '遠端', '年經驗', '新鮮人', '萬', '以上', '月薪',
-                           '年薪']
+        # 使用 jieba 分詞
+        words = jieba.lcut(text)
 
-        # 找出職位相關的詞彙
-        job_words = []
-        found_job_keywords = []
-
-        # 先找職位關鍵字
-        text_lower = text.lower()
-        for keyword in job_keywords:
-            if keyword in text_lower:
-                found_job_keywords.append(keyword)
-
-        # 如果找到職位關鍵字，優先使用
-        if found_job_keywords:
-            # 取最長的關鍵字或組合
-            if any(kw in found_job_keywords for kw in ['軟體工程師', '前端工程師', '後端工程師']):
-                for kw in ['軟體工程師', '前端工程師', '後端工程師', '全端工程師']:
-                    if kw in text:
-                        return kw
-
-            # 返回第一個找到的職位關鍵字
-            return found_job_keywords[0]
-
-        # 如果沒有找到職位關鍵字，從分詞中提取
+        # 過濾出可能的職位詞彙
+        job_candidates = []
         for word in words:
-            if len(word) > 1 and word not in condition_words:
-                job_words.append(word)
+            word_clean = word.strip()
+            if (len(word_clean) > 1 and
+                    word_clean not in condition_words and
+                    not word_clean.isdigit() and
+                    not any(char in word_clean for char in ['k', 'K', '萬', '千'])):
+                job_candidates.append(word_clean)
 
-        # 組合職位名稱
-        if job_words:
-            job_title = ' '.join(job_words[:2])  # 取前2個詞
-            return job_title.strip()
+        # 3. 組合職位名稱
+        if job_candidates:
+            # 優先找包含職位關鍵字的組合
+            position_keywords = ['經理', '工程師', '設計師', '分析師', '專員', '主管', '總監', '助理', '實習']
 
+            for keyword in position_keywords:
+                for candidate in job_candidates:
+                    if keyword in candidate:
+                        return candidate
+
+            # 如果沒有找到職位關鍵字，返回第一個有意義的詞
+            for candidate in job_candidates:
+                if len(candidate) >= 2:
+                    return candidate
+
+        # 4. 最後備用方案：從原始文字中提取
+        # 移除所有條件詞後，取剩餘的第一個詞
+        remaining_text = text_lower
+        for condition in condition_words:
+            remaining_text = remaining_text.replace(condition, ' ')
+
+        remaining_words = remaining_text.split()
+        remaining_words = [w for w in remaining_words if len(w) > 1 and not w.isdigit()]
+
+        if remaining_words:
+            return remaining_words[0]
+
+        # 如果都沒找到，返回空字串
         return ""
 
     def _extract_salary(self, text):
