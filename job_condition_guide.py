@@ -106,20 +106,65 @@ class JobConditionGuide:
         return conditions
 
     def _extract_job_title(self, text, words):
-        """提取職位名稱"""
-        # 移除常見的條件詞
-        condition_words = ['薪資', '薪水', '地點', '台北', '新竹', '遠端', '年經驗', '新鮮人', '萬', '以上']
+        """提取職位名稱 - 擴展支援更多職位"""
+        # 常見職位關鍵字
+        job_keywords = [
+            # 技術類
+            '工程師', '程式設計師', '開發者', '軟體', '前端', '後端', '全端', 'python', 'java', 'javascript',
+            'react', 'vue', 'angular', 'nodejs', 'php', 'ios', 'android', 'devops', '資安', '測試',
 
-        # 保留職位相關詞彙
+            # 設計類
+            '設計師', 'ui', 'ux', '視覺', '平面', '網頁設計', '產品設計', '美術', '創意',
+
+            # 商務類
+            '經理', '專案經理', '產品經理', '業務', '銷售', '行銷', '企劃', '營運', '客服',
+
+            # 數據類
+            '數據', '分析師', '資料科學', 'data', 'analyst', 'scientist', 'bi', '商業智能',
+
+            # 營運類
+            '營運', '運營', '採購', '人資', '會計', '財務', '法務', '稽核',
+
+            # 其他
+            '編輯', '文案', '翻譯', '老師', '講師', '顧問', '助理', '實習', '新鮮人'
+        ]
+
+        # 移除條件詞
+        condition_words = ['薪資', '薪水', '地點', '台北', '新竹', '遠端', '年經驗', '新鮮人', '萬', '以上', '月薪',
+                           '年薪']
+
+        # 找出職位相關的詞彙
         job_words = []
+        found_job_keywords = []
+
+        # 先找職位關鍵字
+        text_lower = text.lower()
+        for keyword in job_keywords:
+            if keyword in text_lower:
+                found_job_keywords.append(keyword)
+
+        # 如果找到職位關鍵字，優先使用
+        if found_job_keywords:
+            # 取最長的關鍵字或組合
+            if any(kw in found_job_keywords for kw in ['軟體工程師', '前端工程師', '後端工程師']):
+                for kw in ['軟體工程師', '前端工程師', '後端工程師', '全端工程師']:
+                    if kw in text:
+                        return kw
+
+            # 返回第一個找到的職位關鍵字
+            return found_job_keywords[0]
+
+        # 如果沒有找到職位關鍵字，從分詞中提取
         for word in words:
             if len(word) > 1 and word not in condition_words:
                 job_words.append(word)
 
-        # 組合成職位名稱
-        job_title = ' '.join(job_words[:3])  # 取前3個詞
+        # 組合職位名稱
+        if job_words:
+            job_title = ' '.join(job_words[:2])  # 取前2個詞
+            return job_title.strip()
 
-        return job_title.strip()
+        return ""
 
     def _extract_salary(self, text):
         """提取薪資資訊"""
