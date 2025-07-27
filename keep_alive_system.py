@@ -4,8 +4,8 @@ import threading
 from datetime import datetime
 
 
-class KeepAliveService:
-    """保持服務喚醒的系統"""
+class KeepAliveSystem:
+    """簡化版保持服務喚醒的系統"""
 
     def __init__(self, service_url, ping_interval=840):  # 14分鐘ping一次
         self.service_url = service_url.rstrip('/')
@@ -75,7 +75,7 @@ def initialize_keep_alive(service_url):
     global keep_alive_service
 
     if keep_alive_service is None:
-        keep_alive_service = KeepAliveService(service_url)
+        keep_alive_service = KeepAliveSystem(service_url)
         keep_alive_service.start()
 
     return keep_alive_service
